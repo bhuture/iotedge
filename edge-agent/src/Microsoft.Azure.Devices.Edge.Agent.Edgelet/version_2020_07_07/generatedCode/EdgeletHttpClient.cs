@@ -9,6 +9,8 @@
 
 namespace Microsoft.Azure.Devices.Edge.Agent.Edgelet.Version_2020_07_07.GeneratedCode
 {
+    using Microsoft.Azure.Devices.Edge.Util;
+    using Microsoft.Extensions.Logging;
     using System = global::System;
 #pragma warning disable // Disable all warnings
 
@@ -18,6 +20,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Edgelet.Version_2020_07_07.Generate
         private string _baseUrl = "http://";
         private System.Net.Http.HttpClient _httpClient;
         private System.Lazy<Newtonsoft.Json.JsonSerializerSettings> _settings;
+        static readonly ILogger Log = Logger.Factory.CreateLogger<EdgeletHttpClient>();
 
         public EdgeletHttpClient(System.Net.Http.HttpClient httpClient)
         {
@@ -1503,12 +1506,15 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Edgelet.Version_2020_07_07.Generate
             urlBuilder_.Append(System.Net.WebUtility.UrlEncode("api-version") + "=").Append(System.Net.WebUtility.UrlEncode(ConvertToString(api_version, System.Globalization.CultureInfo.InvariantCulture))).Append("&");
             urlBuilder_.Length--;
 
+            var dpsPayloadTemplate = "{{\"model_id\": \"{0}\"}}";
+            var dpsPayload = string.Format(dpsPayloadTemplate, "dtmi:azureiot:edge:runtime:edgeagent;1");
+
             var client_ = _httpClient;
             try
             {
                 using (var request_ = new System.Net.Http.HttpRequestMessage())
                 {
-                    request_.Content = new System.Net.Http.StringContent(string.Empty, System.Text.Encoding.UTF8, "application/json");
+                    request_.Content = new System.Net.Http.StringContent(dpsPayload, System.Text.Encoding.UTF8, "application/json");
                     request_.Method = new System.Net.Http.HttpMethod("POST");
 
                     PrepareRequest(client_, request_, urlBuilder_);

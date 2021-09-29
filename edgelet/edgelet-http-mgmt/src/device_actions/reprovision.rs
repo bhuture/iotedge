@@ -11,6 +11,12 @@ where
 
 const PATH: &str = "/device/reprovision";
 
+#[derive(Debug, serde::Deserialize)]
+pub struct ProvisionPayload {
+    #[serde(rename = "modelId")]
+    model_id: String,
+}
+
 #[async_trait::async_trait]
 impl<M> http_common::server::Route for Route<M>
 where
@@ -46,7 +52,7 @@ where
 
     type DeleteBody = serde::de::IgnoredAny;
 
-    type PostBody = serde::de::IgnoredAny;
+    type PostBody = ProvisionPayload;
     async fn post(self, _body: Option<Self::PostBody>) -> http_common::server::RouteResponse {
         edgelet_http::auth_agent(self.pid, &self.runtime).await?;
 
