@@ -1,30 +1,10 @@
-// Copyright (c) Microsoft. All rights reserved.
+﻿using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Text;
+
 namespace SimulatedTemperatureSensor
 {
-    using System;
-    using Newtonsoft.Json;
-
-    // NOTE: IF CHANGING ANYTHING IN THIS FILE, UPDATE MESSAGEBODY.CS IN TEMPERATURE FILTER
-    // TODO Put message body in a common lib
-
-    /// <summary>
-    ///Body:
-    ///{
-    ///  “machine”:{
-    ///    “temperature”:,
-    ///    “pressure”:
-    ///  },
-    ///  “ambient”:{
-    ///    “temperature”: ,
-    ///    “humidity”:
-    ///  }
-    ///  “timeCreated”:”UTC iso format”
-    ///}
-    ///Units and types:
-    ///Temperature: double, C
-    ///Humidity: int, %
-    ///Pressure: double, psi
-    /// </summary>
     class MessageBody
     {
         [JsonProperty(PropertyName = "machine")]

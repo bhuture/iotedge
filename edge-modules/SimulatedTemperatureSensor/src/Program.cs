@@ -1,159 +1,92 @@
-// Copyright (c) Microsoft. All rights reserved.
 namespace SimulatedTemperatureSensor
 {
+    using Microsoft.Azure.Devices.Client;
+    using Microsoft.Azure.Devices.Client.Transport.Mqtt;
+    using Microsoft.Azure.Devices.Shared;
+    using Newtonsoft.Json;
     using System;
-    using System.IO;
     using System.Net;
+    using System.Runtime.Loader;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using Microsoft.Azure.Devices.Client;
-    using Microsoft.Azure.Devices.Client.Transport.Mqtt;
-    using Microsoft.Azure.Devices.Edge.Util;
-    using Microsoft.Azure.Devices.Edge.Util.Concurrency;
-    using Microsoft.Azure.Devices.Edge.Util.TransientFaultHandling;
-    using Microsoft.Azure.Devices.Shared;
-    using Microsoft.Extensions.Configuration;
-    using Newtonsoft.Json;
-    using ExponentialBackoff = Microsoft.Azure.Devices.Edge.Util.TransientFaultHandling.ExponentialBackoff;
 
     class Program
     {
-        const string MessageCountConfigKey = "MessageCount";
-        const string SendDataConfigKey = "SendData";
-        const string SendIntervalConfigKey = "SendInterval";
+        static int counter;
 
-        static readonly ITransientErrorDetectionStrategy DefaultTimeoutErrorDetectionStrategy =
-            new DelegateErrorDetectionStrategy(ex => ex.HasTimeoutException());
-
-        static readonly RetryStrategy DefaultTransientRetryStrategy =
-            new ExponentialBackoff(
-                5,
-                TimeSpan.FromSeconds(2),
-                TimeSpan.FromSeconds(60),
-                TimeSpan.FromSeconds(4));
+        static int SendInterval;
+        static bool SendData;
+        static TimeSpan messageDelay;
+        static SimulatorParameters SimulatorParameters;
 
         static readonly Guid BatchId = Guid.NewGuid();
         static readonly AtomicBoolean Reset = new AtomicBoolean(false);
         static readonly Random Rnd = new Random();
-        static TimeSpan messageDelay;
-        static bool sendData = true;
+        static CancellationTokenSource cts = new CancellationTokenSource();
 
-        public enum ControlCommandEnum
+        static void Main(string[] args)
         {
-            Reset = 0,
-            NoOperation = 1
+            Init().Wait();
+
+            // Wait until the app unloads or is cancelled
+            AssemblyLoadContext.Default.Unloading += (ctx) => cts.Cancel();
+            Console.CancelKeyPress += (sender, cpe) => cts.Cancel();
+            WhenCancelled(cts.Token).Wait();
         }
 
-        public static int Main() => MainAsync().Result;
-
-        static async Task<int> MainAsync()
+        /// <summary>
+        /// Handles cleanup operations when app is cancelled or unloads
+        /// </summary>
+        public static Task WhenCancelled(CancellationToken cancellationToken)
         {
-            Console.WriteLine("SimulatedTemperatureSensor Main() started.");
+            var tcs = new TaskCompletionSource<bool>();
+            cancellationToken.Register(s => ((TaskCompletionSource<bool>)s).SetResult(true), tcs);
+            return tcs.Task;
+        }
 
-            IConfiguration configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("config/appsettings.json", optional: true)
-                .AddEnvironmentVariables()
-                .Build();
+        /// <summary>
+        /// Initializes the ModuleClient and sets up the callback to receive
+        /// messages containing temperature information
+        /// </summary>
+        static async Task Init()
+        {
+            MqttTransportSettings mqttSetting = new MqttTransportSettings(TransportType.Mqtt_Tcp_Only);
+            ITransportSettings[] settings = { mqttSetting };
 
-            messageDelay = configuration.GetValue("MessageDelay", TimeSpan.FromSeconds(5));
-            int messageCount = configuration.GetValue(MessageCountConfigKey, 500);
-            var simulatorParameters = new SimulatorParameters
+            // Open a connection to the Edge runtime
+            ClientOptions options = new ClientOptions() { ModelId = "dtmi:azureiot:edge:module:sts;1" };
+            ModuleClient ioTHubModuleClient = await ModuleClient.CreateFromEnvironmentAsync(settings, options);
+            //ModuleClient ioTHubModuleClient = ModuleClient.CreateFromConnectionString(Environment.GetEnvironmentVariable("CS"), settings, options);
+
+            await ioTHubModuleClient.OpenAsync();
+            Console.WriteLine("IoT Hub module client initialized.");
+
+            SendData = true; // await ReadTwinPropertyAsync<bool>("SendData", ioTHubModuleClient);
+            SendInterval = 3; // await ReadTwinPropertyAsync<int>("SendInterval", ioTHubModuleClient);
+            messageDelay = TimeSpan.FromSeconds(SendInterval);
+            //SimulatorParameters = await ReadTwinPropertyAsync<SimulatorParameters>("SimulatorParameters", ioTHubModuleClient);
+            SimulatorParameters = new SimulatorParameters
             {
-                MachineTempMin = configuration.GetValue<double>("machineTempMin", 21),
-                MachineTempMax = configuration.GetValue<double>("machineTempMax", 100),
-                MachinePressureMin = configuration.GetValue<double>("machinePressureMin", 1),
-                MachinePressureMax = configuration.GetValue<double>("machinePressureMax", 10),
-                AmbientTemp = configuration.GetValue<double>("ambientTemp", 21),
-                HumidityPercent = configuration.GetValue("ambientHumidity", 25)
+                AmbientTemp = 10,
+                HumidityPercent = 80,
+                MachinePressureMax = 100,
+                MachinePressureMin = 10,
+                MachineTempMax = 50,
+                MachineTempMin = 20
             };
 
-            Console.WriteLine(
-                $"Initializing simulated temperature sensor to send {(SendUnlimitedMessages(messageCount) ? "unlimited" : messageCount.ToString())} "
-                + $"messages, at an interval of {messageDelay.TotalSeconds} seconds.\n"
-                + $"To change this, set the environment variable {MessageCountConfigKey} to the number of messages that should be sent (set it to -1 to send unlimited messages).");
+            Console.WriteLine($"InitValues: SendData:${SendData} SendInterval: ${SendInterval}");
 
-            TransportType transportType = configuration.GetValue("ClientTransportType", TransportType.Amqp_Tcp_Only);
 
-            ModuleClient moduleClient = await CreateModuleClientAsync(
-                transportType,
-                DefaultTimeoutErrorDetectionStrategy,
-                DefaultTransientRetryStrategy);
-            await moduleClient.OpenAsync();
-            await moduleClient.SetMethodHandlerAsync("reset", ResetMethod, null);
+            ModuleClient userContext = ioTHubModuleClient;
+            await ioTHubModuleClient.SetMethodHandlerAsync("reset", ResetMethod, null);
+            await ioTHubModuleClient.SetDesiredPropertyUpdateCallbackAsync(OnDesiredPropertiesUpdated, userContext);
+            await SendEvents(ioTHubModuleClient, 500, SimulatorParameters, cts);
 
-            (CancellationTokenSource cts, ManualResetEventSlim completed, Option<object> handler) = ShutdownHandler.Init(TimeSpan.FromSeconds(5), null);
 
-            Twin currentTwinProperties = await moduleClient.GetTwinAsync();
-            if (currentTwinProperties.Properties.Desired.Contains(SendIntervalConfigKey))
-            {
-                messageDelay = TimeSpan.FromSeconds((int)currentTwinProperties.Properties.Desired[SendIntervalConfigKey]);
-            }
-
-            if (currentTwinProperties.Properties.Desired.Contains(SendDataConfigKey))
-            {
-                sendData = (bool)currentTwinProperties.Properties.Desired[SendDataConfigKey];
-                if (!sendData)
-                {
-                    Console.WriteLine("Sending data disabled. Change twin configuration to start sending again.");
-                }
-            }
-
-            ModuleClient userContext = moduleClient;
-            await moduleClient.SetDesiredPropertyUpdateCallbackAsync(OnDesiredPropertiesUpdated, userContext);
-            await moduleClient.SetInputMessageHandlerAsync("control", ControlMessageHandle, userContext);
-            await SendEvents(moduleClient, messageCount, simulatorParameters, cts);
-            await cts.Token.WhenCanceled();
-
-            completed.Set();
-            handler.ForEach(h => GC.KeepAlive(h));
-            Console.WriteLine("SimulatedTemperatureSensor Main() finished.");
-            return 0;
-        }
-
-        static bool SendUnlimitedMessages(int maximumNumberOfMessages) => maximumNumberOfMessages < 0;
-
-        // Control Message expected to be:
-        // {
-        //     "command" : "reset"
-        // }
-        static Task<MessageResponse> ControlMessageHandle(Message message, object userContext)
-        {
-            byte[] messageBytes = message.GetBytes();
-            string messageString = Encoding.UTF8.GetString(messageBytes);
-
-            Console.WriteLine($"Received message Body: [{messageString}]");
-
-            try
-            {
-                var messages = JsonConvert.DeserializeObject<ControlCommand[]>(messageString);
-
-                foreach (ControlCommand messageBody in messages)
-                {
-                    if (messageBody.Command == ControlCommandEnum.Reset)
-                    {
-                        Console.WriteLine("Resetting temperature sensor..");
-                        Reset.Set(true);
-                    }
-                }
-            }
-            catch (JsonSerializationException)
-            {
-                var messageBody = JsonConvert.DeserializeObject<ControlCommand>(messageString);
-
-                if (messageBody.Command == ControlCommandEnum.Reset)
-                {
-                    Console.WriteLine("Resetting temperature sensor..");
-                    Reset.Set(true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error: Failed to deserialize control command with exception: [{ex}]");
-            }
-
-            return Task.FromResult(MessageResponse.Completed);
+            // Register callback to be called when a message is received by the module
+            await ioTHubModuleClient.SetInputMessageHandlerAsync("input1", PipeMessage, ioTHubModuleClient);
         }
 
         static Task<MethodResponse> ResetMethod(MethodRequest methodRequest, object userContext)
@@ -164,25 +97,58 @@ namespace SimulatedTemperatureSensor
             return Task.FromResult(response);
         }
 
-        /// <summary>
-        /// Module behavior:
-        ///        Sends data periodically (with default frequency of 5 seconds).
-        ///        Data trend:
-        ///         - Machine Temperature regularly rises from 21C to 100C in regularly with jitter
-        ///         - Machine Pressure correlates with Temperature 1 to 10psi
-        ///         - Ambient temperature stable around 21C
-        ///         - Humidity is stable with tiny jitter around 25%
-        ///                Method for resetting the data stream.
-        /// </summary>
+        static async Task OnDesiredPropertiesUpdated(TwinCollection desiredPropertiesPatch, object userContext)
+        {
+            Console.WriteLine("Writable props received:" + desiredPropertiesPatch);
+            var ack = new TwinCollection();// $"{{ \"SendData\":{SendData.ToString().ToLower()}, \"SendInterval\": {messageDelay.TotalSeconds}}}");
+            // At this point just update the configure configuration.
+            if (desiredPropertiesPatch.Contains("SendInterval"))
+            {
+                if (desiredPropertiesPatch.TryGetValue<int>("SendInterval", out SendInterval))
+                {
+                    messageDelay = TimeSpan.FromSeconds(SendInterval);
+                    ack["SendInterval"] = new
+                    {
+                        ac = 200,
+                        av = desiredPropertiesPatch.Version,
+                        value = SendInterval
+                    };
+                }
+
+            }
+
+            if (desiredPropertiesPatch.Contains("SendData"))
+            {
+                bool desiredSendDataValue = (bool)desiredPropertiesPatch["SendData"];
+                SendData = desiredSendDataValue;
+                if (!SendData)
+                {
+                    Console.WriteLine("Sending data disabled. Change twin configuration to start sending again.");
+                }
+                ack["SendData"] = new
+                {
+                    ac = 200,
+                    av = desiredPropertiesPatch.Version,
+                    value = SendData
+                };
+
+            }
+
+            var moduleClient = (ModuleClient)userContext;
+            await moduleClient.UpdateReportedPropertiesAsync(ack); // Just report back last desired property.
+        }
+
         static async Task SendEvents(
-            ModuleClient moduleClient,
-            int messageCount,
-            SimulatorParameters sim,
-            CancellationTokenSource cts)
+           ModuleClient moduleClient,
+           int messageCount,
+           SimulatorParameters sim,
+           CancellationTokenSource cts)
         {
             int count = 1;
             double currentTemp = sim.MachineTempMin;
             double normal = (sim.MachinePressureMax - sim.MachinePressureMin) / (sim.MachineTempMax - sim.MachineTempMin);
+
+            static bool SendUnlimitedMessages(int maximumNumberOfMessages) => maximumNumberOfMessages < 0;
 
             while (!cts.Token.IsCancellationRequested && (SendUnlimitedMessages(messageCount) || messageCount >= count))
             {
@@ -201,7 +167,7 @@ namespace SimulatedTemperatureSensor
                     currentTemp += -0.25 + (Rnd.NextDouble() * 1.5); // add value between [-0.25..1.25] - average +0.5
                 }
 
-                if (sendData)
+                if (SendData)
                 {
                     var tempData = new MessageBody
                     {
@@ -237,88 +203,98 @@ namespace SimulatedTemperatureSensor
             }
         }
 
-        static async Task OnDesiredPropertiesUpdated(TwinCollection desiredPropertiesPatch, object userContext)
+        private static async Task<T> ReadTwinPropertyAsync<T>(string propName, ModuleClient mc)
         {
-            // At this point just update the configure configuration.
-            if (desiredPropertiesPatch.Contains(SendIntervalConfigKey))
+            var twin = await mc.GetTwinAsync();
+            T result;
+            int status;
+            string description;
+            if (twin.Properties.Desired.Contains(propName))
             {
-                messageDelay = TimeSpan.FromSeconds((int)desiredPropertiesPatch[SendIntervalConfigKey]);
-            }
-
-            if (desiredPropertiesPatch.Contains(SendDataConfigKey))
-            {
-                bool desiredSendDataValue = (bool)desiredPropertiesPatch[SendDataConfigKey];
-                if (desiredSendDataValue != sendData && !desiredSendDataValue)
+                if (twin.Properties.Desired.TryGetValue<T>(propName, out result))
                 {
-                    Console.WriteLine("Sending data disabled. Change twin configuration to start sending again.");
+                    status = 200;
+                    description = "Found in desired";
                 }
+                else
+                {
+                    Console.WriteLine("Cannot parse desired. " + propName);
+                    status = 501;
+                    description = "Found in desired but cannot parse";
+                    result = default(T);
+                }
+            }
+            else // prop not available in desired, try in reported
+            {
+                if (twin.Properties.Reported.Contains(propName))
+                {
+                    if (twin.Properties.Reported.TryGetValue<T>(propName, out result))
+                    {
+                        description = "Found in reported";
+                        status = 202;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Cannot parse reported. " + propName);
+                        status = 502;
+                        description = "Found in reported but cannot parse";
+                        result = default(T);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("prop not found:" + propName);
+                    description = "prop not found, applying defaults";
+                    status = 100;
+                    result = default(T);
+                }
+            }
+            var ack = new TwinCollection();
+            ack[propName] = new
+            {
+                ac = status,
+                av = (status == 200) ? twin.Properties.Desired.Version : 1,
+                ad = description,
+                value = result
 
-                sendData = desiredSendDataValue;
+            };
+            await mc.UpdateReportedPropertiesAsync(ack);
+            return result;
+        }
+
+        /// <summary>
+        /// This method is called whenever the module is sent a message from the EdgeHub.
+        /// It just pipe the messages without any change.
+        /// It prints all the incoming messages.
+        /// </summary>
+        static async Task<MessageResponse> PipeMessage(Message message, object userContext)
+        {
+            int counterValue = Interlocked.Increment(ref counter);
+
+            var moduleClient = userContext as ModuleClient;
+            if (moduleClient == null)
+            {
+                throw new InvalidOperationException("UserContext doesn't contain " + "expected values");
             }
 
-            var moduleClient = (ModuleClient)userContext;
-            var patch = new TwinCollection($"{{ \"SendData\":{sendData.ToString().ToLower()}, \"SendInterval\": {messageDelay.TotalSeconds}}}");
-            await moduleClient.UpdateReportedPropertiesAsync(patch); // Just report back last desired property.
-        }
+            byte[] messageBytes = message.GetBytes();
+            string messageString = Encoding.UTF8.GetString(messageBytes);
+            Console.WriteLine($"Received message: {counterValue}, Body: [{messageString}]");
 
-        static async Task<ModuleClient> CreateModuleClientAsync(
-            TransportType transportType,
-            ITransientErrorDetectionStrategy transientErrorDetectionStrategy = null,
-            RetryStrategy retryStrategy = null)
-        {
-            var retryPolicy = new RetryPolicy(transientErrorDetectionStrategy, retryStrategy);
-            retryPolicy.Retrying += (_, args) => { Console.WriteLine($"[Error] Retry {args.CurrentRetryCount} times to create module client and failed with exception:{Environment.NewLine}{args.LastException}"); };
-
-            ModuleClient client = await retryPolicy.ExecuteAsync(
-                async () =>
+            if (!string.IsNullOrEmpty(messageString))
+            {
+                using (var pipeMessage = new Message(messageBytes))
                 {
-                    ITransportSettings[] GetTransportSettings()
+                    foreach (var prop in message.Properties)
                     {
-                        switch (transportType)
-                        {
-                            case TransportType.Mqtt:
-                            case TransportType.Mqtt_Tcp_Only:
-                                return new ITransportSettings[] { new MqttTransportSettings(TransportType.Mqtt_Tcp_Only) };
-                            case TransportType.Mqtt_WebSocket_Only:
-                                return new ITransportSettings[] { new MqttTransportSettings(TransportType.Mqtt_WebSocket_Only) };
-                            case TransportType.Amqp_WebSocket_Only:
-                                return new ITransportSettings[] { new AmqpTransportSettings(TransportType.Amqp_WebSocket_Only) };
-                            default:
-                                return new ITransportSettings[] { new AmqpTransportSettings(TransportType.Amqp_Tcp_Only) };
-                        }
+                        pipeMessage.Properties.Add(prop.Key, prop.Value);
                     }
+                    await moduleClient.SendEventAsync("output1", pipeMessage);
 
-                    ITransportSettings[] settings = GetTransportSettings();
-                    Console.WriteLine($"[Information]: Trying to initialize module client using transport type [{transportType}].");
-                    ModuleClient moduleClient = await ModuleClient.CreateFromEnvironmentAsync(settings);
-                    await moduleClient.OpenAsync();
-
-                    Console.WriteLine($"[Information]: Successfully initialized module client of transport type [{transportType}].");
-                    return moduleClient;
-                });
-
-            return client;
-        }
-
-        class ControlCommand
-        {
-            [JsonProperty("command")]
-            public ControlCommandEnum Command { get; set; }
-        }
-
-        class SimulatorParameters
-        {
-            public double MachineTempMin { get; set; }
-
-            public double MachineTempMax { get; set; }
-
-            public double MachinePressureMin { get; set; }
-
-            public double MachinePressureMax { get; set; }
-
-            public double AmbientTemp { get; set; }
-
-            public int HumidityPercent { get; set; }
+                    Console.WriteLine("Received message sent");
+                }
+            }
+            return MessageResponse.Completed;
         }
     }
 }
