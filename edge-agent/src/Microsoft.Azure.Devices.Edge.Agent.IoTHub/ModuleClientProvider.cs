@@ -203,10 +203,15 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
         {
             ITransportSettings settings = GetTransportSettings(upstreamProtocol, this.proxy, this.useServerHeartbeat);
             Events.AttemptingConnectionWithTransport(settings.GetTransportType());
+            var options = new ClientOptions
+            {
+                ModelId = "dtmi:azureiot:edge:runtime:edgeagent;1",
+            };
 
+            Events.SpkInfo($"Sending Client Options with model Id");
             ISdkModuleClient moduleClient = await this.connectionString
-                .Map(cs => Task.FromResult(this.sdkModuleClientProvider.GetSdkModuleClient(cs, settings)))
-                .GetOrElse(this.sdkModuleClientProvider.GetSdkModuleClient(settings));
+                .Map(cs => Task.FromResult(this.sdkModuleClientProvider.GetSdkModuleClient(cs, settings, options)))
+                .GetOrElse(this.sdkModuleClientProvider.GetSdkModuleClient(settings, options));
 
             moduleClient.SetProductInfo(this.productInfo);
 
@@ -243,7 +248,8 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
                 DeviceClientCreated,
                 DeviceConnectionError,
                 RetryingDeviceClientConnection,
-                DeviceClientSetupFailed
+                DeviceClientSetupFailed,
+                CustomEvent
             }
 
             public static void AttemptingConnectionWithTransport(TransportType transport)
@@ -276,6 +282,10 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
             public static void DeviceClientSetupFailed(Exception ex)
             {
                 Log.LogError((int)EventIds.DeviceClientSetupFailed, ex, "Device client threw non-transient exception during setup");
+            }
+            public static void SpkInfo(string msg)
+            {
+                Log.LogInformation((int)EventIds.CustomEvent, $"SPk - {msg}.");
             }
         }
     }
