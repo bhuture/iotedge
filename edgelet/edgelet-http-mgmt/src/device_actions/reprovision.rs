@@ -53,9 +53,16 @@ where
     type DeleteBody = serde::de::IgnoredAny;
 
     type PostBody = ProvisionPayload;
-    async fn post(self, _body: Option<Self::PostBody>) -> http_common::server::RouteResponse {
+    async fn post(self, body: Option<Self::PostBody>) -> http_common::server::RouteResponse {
         edgelet_http::auth_agent(self.pid, &self.runtime).await?;
 
+        let body = match body {
+            Some(body) => body,
+            None => {
+                return Err(edgelet_http::error::bad_request("missing request body"));
+            }
+        };
+        
         match self
             .reprovision
             .send(edgelet_core::ShutdownReason::Reprovision)

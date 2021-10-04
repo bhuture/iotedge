@@ -1508,6 +1508,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Edgelet.Version_2020_07_07.Generate
 
             var dpsPayloadTemplate = "{{\"model_id\": \"{0}\"}}";
             var dpsPayload = string.Format(dpsPayloadTemplate, "dtmi:azureiot:edge:runtime:edgeagent;1");
+            Log.LogInformation($"Sending DPS Payload: {dpsPayload}");
 
             var client_ = _httpClient;
             try
