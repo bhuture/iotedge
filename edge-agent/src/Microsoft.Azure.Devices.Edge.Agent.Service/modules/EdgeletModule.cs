@@ -37,6 +37,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
         readonly string apiVersion;
         readonly IEnumerable<AuthConfig> dockerAuthConfig;
         readonly Option<UpstreamProtocol> upstreamProtocol;
+        readonly Option<string> modelId;
         readonly Option<IWebProxy> proxy;
         readonly string productInfo;
         readonly bool closeOnIdleTimeout;
@@ -53,6 +54,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             string apiVersion,
             IEnumerable<AuthConfig> dockerAuthConfig,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> proxy,
             string productInfo,
             bool closeOnIdleTimeout,
@@ -68,6 +70,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             this.apiVersion = Preconditions.CheckNonWhiteSpace(apiVersion, nameof(apiVersion));
             this.dockerAuthConfig = Preconditions.CheckNotNull(dockerAuthConfig, nameof(dockerAuthConfig));
             this.upstreamProtocol = upstreamProtocol;
+            this.modelId = modelId;
             this.proxy = proxy;
             this.productInfo = Preconditions.CheckNotNull(productInfo, nameof(productInfo));
             this.closeOnIdleTimeout = closeOnIdleTimeout;
@@ -84,6 +87,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
                     c => new ModuleClientProvider(
                         c.Resolve<ISdkModuleClientProvider>(),
                         this.upstreamProtocol,
+                        this.modelId,
                         this.proxy,
                         this.productInfo,
                         this.closeOnIdleTimeout,

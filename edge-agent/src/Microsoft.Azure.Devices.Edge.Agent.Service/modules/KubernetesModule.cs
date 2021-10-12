@@ -51,6 +51,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
         readonly Uri workloadUri;
         readonly IEnumerable<global::Docker.DotNet.Models.AuthConfig> dockerAuthConfig;
         readonly Option<UpstreamProtocol> upstreamProtocol;
+        readonly Option<string> modelId;
         readonly Option<string> productInfo;
         readonly PortMapServiceType defaultMapServiceType;
         readonly bool enableServiceCallTracing;
@@ -83,6 +84,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             Uri workloadUri,
             IEnumerable<global::Docker.DotNet.Models.AuthConfig> dockerAuthConfig,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<string> productInfo,
             PortMapServiceType defaultMapServiceType,
             bool enableServiceCallTracing,
@@ -114,6 +116,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             this.workloadUri = Preconditions.CheckNotNull(workloadUri, nameof(workloadUri));
             this.dockerAuthConfig = Preconditions.CheckNotNull(dockerAuthConfig, nameof(dockerAuthConfig));
             this.upstreamProtocol = Preconditions.CheckNotNull(upstreamProtocol, nameof(upstreamProtocol));
+            this.modelId = modelId;
             this.productInfo = productInfo.Map(p => $"{p} (Kubernetes)");
             this.defaultMapServiceType = defaultMapServiceType;
             this.enableServiceCallTracing = enableServiceCallTracing;
@@ -161,6 +164,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
                     c => new ModuleClientProvider(
                         c.Resolve<ISdkModuleClientProvider>(),
                         this.upstreamProtocol,
+                        this.modelId,
                         this.proxy,
                         this.productInfo.OrDefault(),
                         this.closeOnIdleTimeout,

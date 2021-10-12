@@ -111,6 +111,8 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Core
 
         public const uint DefaultStartupOrder = uint.MaxValue;
 
+        public const string DefaultAgentModelId = "dtmi:azureiot:edge:runtime:edgeagent;1";
+
         public static class Labels
         {
             public const string Version = "net.azure-devices.edge.version";

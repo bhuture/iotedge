@@ -21,6 +21,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
         [MemberData(nameof(GetTestData))]
         public async Task CreateFromEnvironmentTest(
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> webProxy,
             string productInfo)
         {
@@ -42,6 +43,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             var moduleClientProvider = new ModuleClientProvider(
                 sdkModuleClientProvider.Object,
                 upstreamProtocol,
+                modelId,
                 webProxy,
                 productInfo,
                 closeOnIdleTimeout,
@@ -76,7 +78,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
                 case UpstreamProtocol.MqttWs:
                     var mqttTransportSettings = receivedTransportSettings as MqttTransportSettings;
                     Assert.NotNull(mqttTransportSettings);
-
+                    
                     if (up == UpstreamProtocol.MqttWs)
                     {
                         webProxy.ForEach(w => Assert.Equal(w, mqttTransportSettings.Proxy));
@@ -109,6 +111,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             Assert.Throws<ArgumentNullException>(() => new ModuleClientProvider(
                 sdkModuleClientProvider.Object,
                 Option.None<UpstreamProtocol>(),
+                Option.None<string>(),
                 Option.None<IWebProxy>(),
                 null,
                 closeOnIdleTimeout,
@@ -121,6 +124,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
         public async Task CreateFromConnectionStringTest(
             Option<UpstreamProtocol> upstreamProtocol,
             Option<IWebProxy> webProxy,
+            Option<string> modelId,
             string productInfo)
         {
             // Arrange
@@ -143,6 +147,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
                 connectionString,
                 sdkModuleClientProvider.Object,
                 upstreamProtocol,
+                modelId,
                 webProxy,
                 productInfo,
                 closeOnIdleTimeout,
@@ -195,7 +200,24 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             {
                 Option.None<UpstreamProtocol>(),
                 Option.None<IWebProxy>(),
+                Option.None<string>(),
                 Constants.IoTEdgeAgentProductInfoIdentifier
+            };
+
+            yield return new object[]
+            {
+                Option.Some(UpstreamProtocol.Amqp),
+                Option.None<IWebProxy>(),
+                Option.None<string>(),
+                Constants.IoTEdgeAgentProductInfoIdentifier
+            };
+
+            yield return new object[]
+            {
+                Option.Some(UpstreamProtocol.Amqp),
+                Option.Some(Mock.Of<IWebProxy>()),
+                Option.None<string>(),
+                Constants.IoTEdgeAgentProductInfoIdentifier + "/1.0.0"
             };
 
             yield return new object[]
@@ -205,12 +227,6 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
                 Constants.IoTEdgeAgentProductInfoIdentifier
             };
 
-            yield return new object[]
-            {
-                Option.Some(UpstreamProtocol.Amqp),
-                Option.Some(Mock.Of<IWebProxy>()),
-                Constants.IoTEdgeAgentProductInfoIdentifier + "/1.0.0"
-            };
         }
     }
 }

@@ -31,6 +31,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
         readonly Uri dockerHostname;
         readonly IEnumerable<AuthConfig> dockerAuthConfig;
         readonly Option<UpstreamProtocol> upstreamProtocol;
+        readonly Option<string> modelId;
         readonly Option<IWebProxy> proxy;
         readonly string productInfo;
         readonly bool closeOnIdleTimeout;
@@ -44,6 +45,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             Uri dockerHostname,
             IEnumerable<AuthConfig> dockerAuthConfig,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> proxy,
             string productInfo,
             bool closeOnIdleTimeout,
@@ -59,6 +61,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
             this.dockerHostname = Preconditions.CheckNotNull(dockerHostname, nameof(dockerHostname));
             this.dockerAuthConfig = Preconditions.CheckNotNull(dockerAuthConfig, nameof(dockerAuthConfig));
             this.upstreamProtocol = Preconditions.CheckNotNull(upstreamProtocol, nameof(upstreamProtocol));
+            this.modelId = modelId;
             this.proxy = Preconditions.CheckNotNull(proxy, nameof(proxy));
             this.productInfo = Preconditions.CheckNotNull(productInfo, nameof(productInfo));
             this.closeOnIdleTimeout = closeOnIdleTimeout;
@@ -77,6 +80,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service.Modules
                         edgeAgentConnectionString,
                         c.Resolve<ISdkModuleClientProvider>(),
                         this.upstreamProtocol,
+                        this.modelId,
                         this.proxy,
                         this.productInfo,
                         this.closeOnIdleTimeout,

@@ -160,7 +160,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                 Option<StorageLogLevel> storageLogLevel = GetConfigIfExists<StorageLogLevel>(Constants.StorageLogLevel, configuration, logger);
                 string iothubHostname;
                 string deviceId;
-                string modelId = configuration.GetValue<string>("ModelId");
+                Option<string> modelId = GetConfigIfExists<string>("ModelId", configuration, logger);
                 string apiVersion = "2018-06-28";
                 Option<X509Certificate2> manifestTrustBundle = Option.None<X509Certificate2>();
 
@@ -173,7 +173,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                         deviceId = connectionStringParser.DeviceId;
                         iothubHostname = connectionStringParser.HostName;
                         builder.RegisterModule(new AgentModule(maxRestartCount, intensiveCareTime, coolOffTimeUnitInSeconds, usePersistentStorage, storagePath, enableNonPersistentStorageBackup, storageBackupPath, storageTotalMaxWalSize, storageMaxManifestFileSize, storageMaxOpenFiles, storageLogLevel));
-                        builder.RegisterModule(new DockerModule(deviceConnectionString, edgeDeviceHostName, dockerUri, dockerAuthConfig, upstreamProtocol, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat, backupConfigFilePath));
+                        builder.RegisterModule(new DockerModule(deviceConnectionString, edgeDeviceHostName, dockerUri, dockerAuthConfig, upstreamProtocol, modelId, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat, backupConfigFilePath));
                         break;
 
                     case Constants.IotedgedMode:
@@ -186,12 +186,12 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                         apiVersion = configuration.GetValue<string>(Constants.EdgeletApiVersionVariableName);
                         TimeSpan performanceMetricsUpdateFrequency = configuration.GetTimeSpan("PerformanceMetricsUpdateFrequency", TimeSpan.FromMinutes(5));
                         builder.RegisterModule(new AgentModule(maxRestartCount, intensiveCareTime, coolOffTimeUnitInSeconds, usePersistentStorage, storagePath, Option.Some(new Uri(workloadUri)), Option.Some(apiVersion), moduleId, Option.Some(moduleGenerationId), enableNonPersistentStorageBackup, storageBackupPath, storageTotalMaxWalSize, storageMaxManifestFileSize, storageMaxOpenFiles, storageLogLevel));
-                        builder.RegisterModule(new EdgeletModule(iothubHostname, deviceId, new Uri(managementUri), new Uri(workloadUri), apiVersion, dockerAuthConfig, upstreamProtocol, proxy, productInfo, closeOnIdleTimeout, idleTimeout, performanceMetricsUpdateFrequency, useServerHeartbeat, backupConfigFilePath));
+                        builder.RegisterModule(new EdgeletModule(iothubHostname, deviceId, new Uri(managementUri), new Uri(workloadUri), apiVersion, dockerAuthConfig, upstreamProtocol, modelId, proxy, productInfo, closeOnIdleTimeout, idleTimeout, performanceMetricsUpdateFrequency, useServerHeartbeat, backupConfigFilePath));
                         IEnumerable<X509Certificate2> trustBundle =
                             await CertificateHelper.GetTrustBundleFromEdgelet(new Uri(workloadUri), apiVersion, Constants.WorkloadApiVersion, moduleId, moduleGenerationId);
                         CertificateHelper.InstallCertificates(trustBundle, logger);
                         manifestTrustBundle = await CertificateHelper.GetManifestTrustBundleFromEdgelet(new Uri(workloadUri), apiVersion, Constants.WorkloadApiVersion, moduleId, moduleGenerationId);
-                        logger.LogInformation($"SPk - Starting in Iotedged mode. ModelId: {modelId} UpstreamProtocol: {upstreamProtocol}");
+                        logger.LogInformation($"SPk - Starting in Iotedged mode. ModelId: {{ {modelId.HasValue}, {modelId.GetOrElse(string.Empty)} }} UpstreamProtocol: {upstreamProtocol}");
                         break;
 
                     case Constants.KubernetesMode:
@@ -244,6 +244,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                                 new Uri(workloadUri),
                                 dockerAuthConfig,
                                 upstreamProtocol,
+                                modelId,
                                 Option.Some(productInfo),
                                 mappedServiceDefault,
                                 enableServiceCallTracing,

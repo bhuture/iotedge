@@ -29,6 +29,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
 
         readonly Option<string> connectionString;
         readonly Option<UpstreamProtocol> upstreamProtocol;
+        readonly string modelId;
         readonly Option<IWebProxy> proxy;
         readonly string productInfo;
         readonly bool closeOnIdleTimeout;
@@ -40,24 +41,26 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
             string connectionString,
             ISdkModuleClientProvider sdkModuleClientProvider,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> proxy,
             string productInfo,
             bool closeOnIdleTimeout,
             TimeSpan idleTimeout,
             bool useServerHeartbeat)
-            : this(Option.Maybe(connectionString), sdkModuleClientProvider, upstreamProtocol, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat)
+            : this(Option.Maybe(connectionString), sdkModuleClientProvider, upstreamProtocol, modelId, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat)
         {
         }
 
         public ModuleClientProvider(
             ISdkModuleClientProvider sdkModuleClientProvider,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> proxy,
             string productInfo,
             bool closeOnIdleTimeout,
             TimeSpan idleTimeout,
             bool useServerHeartbeat)
-            : this(Option.None<string>(), sdkModuleClientProvider, upstreamProtocol, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat)
+            : this(Option.None<string>(), sdkModuleClientProvider, upstreamProtocol, modelId, proxy, productInfo, closeOnIdleTimeout, idleTimeout, useServerHeartbeat)
         {
         }
 
@@ -65,6 +68,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
             Option<string> connectionString,
             ISdkModuleClientProvider sdkModuleClientProvider,
             Option<UpstreamProtocol> upstreamProtocol,
+            Option<string> modelId,
             Option<IWebProxy> proxy,
             string productInfo,
             bool closeOnIdleTimeout,
@@ -74,6 +78,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
             this.connectionString = connectionString;
             this.sdkModuleClientProvider = sdkModuleClientProvider;
             this.upstreamProtocol = upstreamProtocol;
+            this.modelId = modelId.GetOrElse(Constants.DefaultAgentModelId);
             this.productInfo = Preconditions.CheckNotNull(productInfo, nameof(productInfo));
             this.proxy = proxy;
             this.closeOnIdleTimeout = closeOnIdleTimeout;
@@ -205,10 +210,10 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub
             Events.AttemptingConnectionWithTransport(settings.GetTransportType());
             var options = new ClientOptions
             {
-                ModelId = "dtmi:azureiot:edge:runtime:edgeagent;1",
+                ModelId = this.modelId,
             };
 
-            Events.SpkInfo($"Sending Client Options with model Id");
+            Events.SpkInfo($"Sending Client Options with model Id: {options.ModelId}");
             ISdkModuleClient moduleClient = await this.connectionString
                 .Map(cs => Task.FromResult(this.sdkModuleClientProvider.GetSdkModuleClient(cs, settings, options)))
                 .GetOrElse(this.sdkModuleClientProvider.GetSdkModuleClient(settings, options));
