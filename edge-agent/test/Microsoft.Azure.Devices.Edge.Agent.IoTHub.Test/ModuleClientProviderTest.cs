@@ -32,7 +32,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
             sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
-                .Callback<ITransportSettings>(t => receivedTransportSettings = t)
+                .Callback<ITransportSettings, ClientOptions>((t, o) => receivedTransportSettings = t)
                 .ReturnsAsync(sdkModuleClient.Object);
 
             bool closeOnIdleTimeout = false;
@@ -78,7 +78,6 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
                 case UpstreamProtocol.MqttWs:
                     var mqttTransportSettings = receivedTransportSettings as MqttTransportSettings;
                     Assert.NotNull(mqttTransportSettings);
-                    
                     if (up == UpstreamProtocol.MqttWs)
                     {
                         webProxy.ForEach(w => Assert.Equal(w, mqttTransportSettings.Proxy));
@@ -100,7 +99,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
             sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
-                .Callback<ITransportSettings>(t => receivedTransportSettings = t)
+                .Callback<ITransportSettings, ClientOptions>((t, o) => receivedTransportSettings = t)
                 .ReturnsAsync(sdkModuleClient.Object);
 
             bool closeOnIdleTimeout = false;
@@ -135,7 +134,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
             sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(connectionString, It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
-                .Callback<string, ITransportSettings>((c, t) => receivedTransportSettings = t)
+                .Callback<string, ITransportSettings, ClientOptions>((c, t, o) => receivedTransportSettings = t)
                 .Returns(sdkModuleClient.Object);
 
             bool closeOnIdleTimeout = false;
@@ -199,34 +198,42 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             yield return new object[]
             {
                 Option.None<UpstreamProtocol>(),
-                Option.None<IWebProxy>(),
                 Option.None<string>(),
+                Option.None<IWebProxy>(),
                 Constants.IoTEdgeAgentProductInfoIdentifier
             };
 
             yield return new object[]
             {
                 Option.Some(UpstreamProtocol.Amqp),
-                Option.None<IWebProxy>(),
                 Option.None<string>(),
+                Option.None<IWebProxy>(),
                 Constants.IoTEdgeAgentProductInfoIdentifier
             };
 
             yield return new object[]
             {
                 Option.Some(UpstreamProtocol.Amqp),
+                Option.None<string>(),
                 Option.Some(Mock.Of<IWebProxy>()),
-                Option.None<string>(),
                 Constants.IoTEdgeAgentProductInfoIdentifier + "/1.0.0"
             };
 
             yield return new object[]
             {
-                Option.Some(UpstreamProtocol.Amqp),
+                Option.Some(UpstreamProtocol.Mqtt),
+                Option.None<string>(),
                 Option.None<IWebProxy>(),
                 Constants.IoTEdgeAgentProductInfoIdentifier
             };
 
+            yield return new object[]
+            {
+                Option.Some(UpstreamProtocol.Mqtt),
+                Option.Some("model-id"),
+                Option.None<IWebProxy>(),
+                Constants.IoTEdgeAgentProductInfoIdentifier
+            };
         }
     }
 }
