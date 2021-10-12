@@ -160,6 +160,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                 Option<StorageLogLevel> storageLogLevel = GetConfigIfExists<StorageLogLevel>(Constants.StorageLogLevel, configuration, logger);
                 string iothubHostname;
                 string deviceId;
+                string modelId = configuration.GetValue<string>("ModelId");
                 string apiVersion = "2018-06-28";
                 Option<X509Certificate2> manifestTrustBundle = Option.None<X509Certificate2>();
 
@@ -190,7 +191,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.Service
                             await CertificateHelper.GetTrustBundleFromEdgelet(new Uri(workloadUri), apiVersion, Constants.WorkloadApiVersion, moduleId, moduleGenerationId);
                         CertificateHelper.InstallCertificates(trustBundle, logger);
                         manifestTrustBundle = await CertificateHelper.GetManifestTrustBundleFromEdgelet(new Uri(workloadUri), apiVersion, Constants.WorkloadApiVersion, moduleId, moduleGenerationId);
-
+                        logger.LogInformation($"SPk - Starting in Iotedged mode. ModelId: {modelId} UpstreamProtocol: {upstreamProtocol}");
                         break;
 
                     case Constants.KubernetesMode:
