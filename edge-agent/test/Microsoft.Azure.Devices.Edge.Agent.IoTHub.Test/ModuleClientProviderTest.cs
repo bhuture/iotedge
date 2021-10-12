@@ -30,7 +30,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             var sdkModuleClient = new Mock<ISdkModuleClient>();
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
-            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>()))
+            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
                 .Callback<ITransportSettings>(t => receivedTransportSettings = t)
                 .ReturnsAsync(sdkModuleClient.Object);
 
@@ -51,7 +51,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
 
             // Assert
             Assert.NotNull(moduleClient);
-            sdkModuleClientProvider.Verify(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>()), Times.Once);
+            sdkModuleClientProvider.Verify(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()), Times.Once);
 
             sdkModuleClient.Verify(s => s.SetProductInfo(productInfo), Times.Once);
 
@@ -97,7 +97,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             var sdkModuleClient = new Mock<ISdkModuleClient>();
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
-            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>()))
+            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
                 .Callback<ITransportSettings>(t => receivedTransportSettings = t)
                 .ReturnsAsync(sdkModuleClient.Object);
 
@@ -130,7 +130,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
             var sdkModuleClient = new Mock<ISdkModuleClient>();
 
             var sdkModuleClientProvider = new Mock<ISdkModuleClientProvider>();
-            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(connectionString, It.IsAny<ITransportSettings>()))
+            sdkModuleClientProvider.Setup(s => s.GetSdkModuleClient(connectionString, It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()))
                 .Callback<string, ITransportSettings>((c, t) => receivedTransportSettings = t)
                 .Returns(sdkModuleClient.Object);
 
@@ -152,7 +152,7 @@ namespace Microsoft.Azure.Devices.Edge.Agent.IoTHub.Test
 
             // Assert
             Assert.NotNull(moduleClient);
-            sdkModuleClientProvider.Verify(s => s.GetSdkModuleClient(connectionString, It.IsAny<ITransportSettings>()), Times.Once);
+            sdkModuleClientProvider.Verify(s => s.GetSdkModuleClient(connectionString, It.IsAny<ITransportSettings>(), It.IsAny<ClientOptions>()), Times.Once);
 
             sdkModuleClient.Verify(s => s.SetProductInfo(productInfo), Times.Once);
 
